@@ -5,6 +5,6 @@ setup(
     packages=['pyta_server'],
     include_package_data=True,
     install_requires=[
-        'flask',
+        'flask', 'flask_sqlalchemy',
     ],
 )
