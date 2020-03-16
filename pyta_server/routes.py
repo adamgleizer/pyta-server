@@ -7,26 +7,24 @@ from pyta_server.models import Uploads
 
 @app.route('/', methods=['POST'])
 def receive():
-    if request.method == 'POST':
-        dirs = {'source':'', 'config':''}
-        rand_hex = secrets.token_hex(8)
-        for f_type in request.files.keys():
-            user_f = request.files[f_type]
-            _, f1_ext = os.path.splitext(user_f.filename)
-            fn = rand_hex + f1_ext
-            f_path = os.path.join(app.root_path, f'static\{f_type}', fn)
-            user_f.save(f_path)
-            dirs[f_type] = f_path
+    rand_hex = secrets.token_hex(8)
+    src_f = request.files['source']
+    cfg_f = request.files['config']
+    _, src_ext = os.path.splitext(src_f.filename)
+    _, cfg_ext = os.path.splitext(cfg_f.filename)
+    src_n = rand_hex + src_ext
+    cfg_n = rand_hex + cfg_ext
+    src_path = os.path.join(app.root_path, 'static', 'source', src_n)
+    cfg_path = os.path.join(app.root_path, 'static', 'config', cfg_n)
+    src_f.save(src_path)
+    cfg_f.save(cfg_path)
 
-        upload = Uploads(source=dirs['source'], config =dirs['config'])
-        try:
-            db.session.add(upload)
-            db.session.commit()
+    upload= Uploads(source=src_path, config =cfg_path, identifier="create unique on install")
+    try:
+        db.session.add(upload)
+        db.session.commit()
 
-        except (Exception, psycopg2.Error) as error:
-            print("Error while connecting to PostgreSQL", error)
+    except (Exception, psycopg2.Error) as error:
+        print("Error while connecting to PostgreSQL", error)
 
-        return "files successfully received"
-
-    else:
-        return "null"
+    return "files successfully received"
