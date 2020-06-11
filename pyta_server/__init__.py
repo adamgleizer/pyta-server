@@ -2,13 +2,15 @@ import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
-#Gets server admin information from server host environment
+
+# Gets server admin information from server host environment
 def get_env_variable(name):
     try:
         return os.environ[name]
     except KeyError:
         message = "Expected environment variable '{}' not set.".format(name)
         raise Exception(message)
+
 
 POSTGRES_URL = get_env_variable("POSTGRES_URL")
 POSTGRES_USER = get_env_variable("POSTGRES_USER")
