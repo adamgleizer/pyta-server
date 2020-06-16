@@ -4,10 +4,11 @@ import psycopg2
 import json
 from flask import request
 from pyta_server import app, db
-from pyta_server.models import Devices, Uploads, Errors
+from pyta_server.models import Devices, Uploads, Files, Errors
 
 
 def update_db(entry):
+    """Save the entry to the database."""
     try:
         db.session.add(entry)
         db.session.commit()
@@ -15,11 +16,13 @@ def update_db(entry):
         print("Error while connecting to PostgreSQL", error)
 
 
-def commit_errors(error_info, upload=None):
-    error = Errors(file=upload,
+def commit_errors(error_info, upload, file=None):
+    """Make an Errors tuple and save it to the database."""
+    error = Errors(upload=upload,
+                   file=file,
                    msg_id=error_info.get('msg_id'),
-                   symbol=error_info.get('symbol'),
                    msg=error_info.get('msg'),
+                   symbol=error_info.get('symbol'),
                    category=error_info.get('category'),
                    line=error_info.get('line'))
     update_db(error)
@@ -27,28 +30,32 @@ def commit_errors(error_info, upload=None):
 
 @app.route('/', methods=['POST'])
 def receive():
+    """Receive POST request sent from user running PyTA."""
     if isinstance(request.files, dict):
-        upload_time = request.form.get('time')  # Replace ':' with "-" because : is not a valid directory key
+        upload_time = request.form.get('time')  # Replace ':' with "-" because : is not a valid directory character
         time_stamp = upload_time.replace(":", "-")
         unique_id = request.form.get('id')
         version = request.form.get('version')
         errors = json.loads(request.form.get('errors'))
-        if db.session.query(Devices).get(unique_id):
+
+        if db.session.query(Devices).get(unique_id):  # Check if device already exists in database
             device = db.session.query(Devices).get(unique_id)
         else:
             device = Devices(device_uuid=unique_id, version=version)
             update_db(device)
-        src_f = {k: v for k, v in request.files.items() if k != 'config'}  # Excluding potential config file
+
+        src_f = {k: v for k, v in request.files.items() if k != 'config'}  # Exclude potential config file
         cfg_f = request.files.get('config')
         f_paths = []
-        for f in list(src_f.values()):
+        cfg_loc = None  # initialized at None for when default config was used
+        for f in list(src_f.values()):  # Saving files
             src_path = os.path.join(app.root_path, 'static', 'source', unique_id, time_stamp)
             if not os.path.exists(src_path):
                 os.makedirs(src_path)
             file_loc = os.path.join(src_path, f.filename)
             f_paths.append(file_loc)
             f.save(file_loc)
-        if cfg_f: # Non-default config file
+        if cfg_f:  # Saving if non-default config file was used
             rand_hex = secrets.token_hex(8)
             _, cfg_ext = os.path.splitext(cfg_f.filename)
             cfg_n = rand_hex + cfg_ext
@@ -58,20 +65,21 @@ def receive():
             cfg_loc = os.path.join(cfg_path, cfg_n)
             cfg_f.save(cfg_loc)
 
+        upload = Uploads(upload_time=upload_time, config=cfg_loc, device=device)
+        if f_paths:  # User uploaded files along with errors
             for path in f_paths:
-                upload = Uploads(upload_time=upload_time, source=path, config=cfg_path, device=device)
-                update_db(upload)
-                for error_info in errors.values():
-                    if (error_info.get('module') + '.py') == os.path.basename(os.path.normpath(path)):
-                        commit_errors(error_info, upload)
-        else:  # Default config was used
-            for path in f_paths:
-                upload = Uploads(upload_time=upload_time, source=path, device=device)
-                update_db(upload)
-                for error_list in errors.values():
-                    for error_info in error_list:
+                file = Files(upload=upload, path=path)
+                update_db(file)
+                for error_codes in errors.values():
+                    for error_info in error_codes:
+                        # Matching errors to files they were present in
                         if (error_info.get('module') + '.py') == os.path.basename(os.path.normpath(path)):
-                            commit_errors(error_info, upload)
+                            commit_errors(error_info=error_info, upload=upload, file=file)
+        else:  # User uploaded just errors
+            for error_list in errors.values():
+                for error_info in error_list:
+                    commit_errors(error_info=error_info, upload=upload)
+
         return "files successfully received"
 
     return "bad request"

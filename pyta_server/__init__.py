@@ -3,8 +3,8 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
 
-# Gets server admin information from server host environment
 def get_env_variable(name):
+    """Get server admin information from server host environment"""
     try:
         return os.environ[name]
     except KeyError:
