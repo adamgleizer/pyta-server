@@ -6,3 +6,6 @@ __pycache__
 
 # IDE project settings
 .idea
+
+# Testing utilities
+reset_db.py
