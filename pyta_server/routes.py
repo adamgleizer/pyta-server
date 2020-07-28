@@ -8,7 +8,7 @@ import re
 from flask import request
 from pyta_server import app, db
 from pyta_server.models import Devices, Uploads, Files, Errors
-from typing import Dict
+from typing import Dict, List, Any
 
 INIT_SRC_PATH = os.path.join(app.root_path, 'static', 'source')
 INIT_CFG_PATH = os.path.join(app.root_path, 'static', 'config')
@@ -33,28 +33,9 @@ def receive():
     errors = payload.get('errors')
     cfg = payload.get('cfg')
     cfg_loc = None  # initialized at None for when default config was used
-    f_paths = []
-    for f in src_files:  # Saving files
-        src_path = os.path.join(INIT_SRC_PATH, unique_id, time_stamp)
-        if not os.path.exists(src_path):
-            os.makedirs(src_path)
-        curr_name = f.filename
-        file_loc = os.path.join(src_path, curr_name)
-        while os.path.exists(file_loc):
-            file_loc = os.path.join(src_path, enumerate_file_name(curr_name))
-        f_paths.append(file_loc)
-        f.save(file_loc)
-
-    if cfg:  # Saving if non-default config file was used
-        rand_hex = secrets.token_hex(8)
-        cfg_n = rand_hex + '.json'
-        cfg_path = os.path.join(INIT_CFG_PATH, unique_id, time_stamp)
-        if not os.path.exists(cfg_path):
-            os.makedirs(cfg_path)
-        cfg_loc = os.path.join(cfg_path, cfg_n)
-        cfg_f = open(cfg_loc, 'w')
-        json.dump(cfg, cfg_f, indent=4)
-        cfg_f.close()
+    f_paths = save_files(src_files, unique_id, time_stamp)
+    if cfg:
+        cfg_loc = save_cfg_as_json(cfg, unique_id, time_stamp)
 
     upload = Uploads(upload_time=upload_time, config=cfg_loc, device=device)
     if f_paths:  # User uploaded files
@@ -97,6 +78,8 @@ def commit_errors(error_info: Dict[str, str], upload, file=None) -> None:
 
 
 def enumerate_file_name(filename: str) -> str:
+    """Enumerates filenames to avoid over-writes when the user
+    uploads files with the same name."""
     pattern = re.compile("(\d+)")
     # Counter is the '(n)' portion of an enumerated filename
     f_name, counter = filename[:-3], filename[-3:]
@@ -106,3 +89,35 @@ def enumerate_file_name(filename: str) -> str:
         return f_name + new_enum
     else:
         return f_name + " (1).py"
+
+
+def save_files(src_files, unique_id: str, time_stamp: str) -> List[str]:
+    """Saves the files from the POST request and returns a list of
+    the paths they were saved at."""
+    f_paths = []
+    for f in src_files:
+        src_path = os.path.join(INIT_SRC_PATH, unique_id, time_stamp)
+        if not os.path.exists(src_path):
+            os.makedirs(src_path)
+        curr_name = f.filename
+        file_loc = os.path.join(src_path, curr_name)
+        while os.path.exists(file_loc):
+            file_loc = os.path.join(src_path, enumerate_file_name(curr_name))
+        f_paths.append(file_loc)
+        f.save(file_loc)
+    return f_paths
+
+
+def save_cfg_as_json(cfg, unique_id: str, time_stamp: str) -> str:
+    """Saves the configuration file in a JSON format and returns
+    the path it was saved at."""
+    rand_hex = secrets.token_hex(8)
+    cfg_n = rand_hex + '.json'
+    cfg_path = os.path.join(INIT_CFG_PATH, unique_id, time_stamp)
+    if not os.path.exists(cfg_path):
+        os.makedirs(cfg_path)
+    cfg_loc = os.path.join(cfg_path, cfg_n)
+    cfg_f = open(cfg_loc, 'w')
+    json.dump(cfg, cfg_f, indent=4)
+    cfg_f.close()
+    return cfg_loc
