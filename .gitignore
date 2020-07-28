@@ -9,3 +9,4 @@ __pycache__
 
 # Testing utilities
 reset_db.py
+pyta_server/static/test
